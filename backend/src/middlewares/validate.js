@@ -1,29 +1,29 @@
 import ApiError from '../utils/ApiError.js';
 
-const validate = (schema) => (req, res, next) => {
-  const body = req.body ?? {};
+// Validates any of req.params / req.query / req.body against zod schemas.
+// Parsed (coerced, defaulted, stripped) values are exposed on req.validated,
+// because req.query is read-only in Express 5.
+const validate = (schemas) => (req, res, next) => {
+  const validated = {};
   const errors = [];
 
-  for (const [field, rules] of Object.entries(schema)) {
-    const value = body[field];
-
-    if (value === undefined || value === null || value === '') {
-      if (rules.required) errors.push(`${field} is required`);
-      continue;
-    }
-    if (typeof value !== rules.type) {
-      errors.push(`${field} must be a ${rules.type}`);
-      continue;
-    }
-    if (rules.min !== undefined && value < rules.min) {
-      errors.push(`${field} must be at least ${rules.min}`);
+  for (const [source, schema] of Object.entries(schemas)) {
+    const result = schema.safeParse(req[source] ?? {});
+    if (result.success) {
+      validated[source] = result.data;
+    } else {
+      errors.push(
+        ...result.error.issues.map((issue) => ({
+          field: [source, ...issue.path].join('.'),
+          message: issue.message,
+        })),
+      );
     }
   }
 
   if (errors.length) return next(ApiError.badRequest('Validation failed', errors));
 
-  // Keep only the fields declared in the schema
-  req.body = Object.fromEntries(Object.entries(body).filter(([key]) => key in schema));
+  req.validated = validated;
   next();
 };
 

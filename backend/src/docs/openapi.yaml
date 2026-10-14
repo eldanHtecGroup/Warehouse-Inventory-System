@@ -1,0 +1,597 @@
+openapi: 3.1.0
+info:
+  title: Warehouse Inventory API
+  version: 1.0.0
+  description: |
+    Inventory management API for retail stores and warehouses.
+
+    - Organise products into categories
+    - Sort, filter and paginate product listings
+    - Increase / decrease stock (stock can never go below zero)
+    - Full audit history of every stock change
+    - Stock overview per category
+
+    Successful responses are wrapped in `{ data }` (plus `meta` for paginated lists).
+    Errors are returned as `{ error: { message, details? } }`.
+
+# The API has no authentication yet
+security: []
+
+servers:
+  - url: /api
+    description: Current server
+
+tags:
+  - name: Health
+    description: Service status
+  - name: Categories
+    description: Product categories and stock overview
+  - name: Products
+    description: Product information, sorting and filtering
+  - name: Stock
+    description: Stock adjustments and history
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  uptime: { type: number, example: 12.34 }
+                  timestamp: { type: string, format: date-time }
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: List categories
+      operationId: listCategories
+      responses:
+        '200':
+          description: All categories, sorted by name
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+    post:
+      tags: [Categories]
+      summary: Create a category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryCreate' }
+            example: { name: Beverages, description: "Soft drinks, juices, water, coffee and tea" }
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /categories/stock-summary:
+    get:
+      tags: [Categories]
+      summary: Total stock per category
+      description: Product count, total quantity and total stock value per category, plus overall totals.
+      operationId: getCategoryStockSummary
+      responses:
+        '200':
+          description: Stock summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StockSummary' }
+
+  /categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Categories]
+      summary: Get a category
+      operationId: getCategory
+      responses:
+        '200':
+          description: Category
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Categories]
+      summary: Update a category
+      operationId: updateCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryUpdate' }
+            example: { description: Drinks of all kinds }
+      responses:
+        '200':
+          description: Updated category
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      description: Fails with 409 while the category still contains products.
+      operationId: deleteCategory
+      responses:
+        '204': { description: Category deleted }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List products
+      description: Filter, sort and paginate products.
+      operationId: listProducts
+      parameters:
+        - name: search
+          in: query
+          description: Case-insensitive match on product name or code
+          schema: { type: string, maxLength: 100 }
+        - name: categoryId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: minPrice
+          in: query
+          schema: { type: number, minimum: 0 }
+        - name: maxPrice
+          in: query
+          schema: { type: number, minimum: 0 }
+        - name: minQuantity
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: maxQuantity
+          in: query
+          description: e.g. `maxQuantity=10` to find low-stock products
+          schema: { type: integer, minimum: 0 }
+        - name: inStock
+          in: query
+          description: '`true` = quantity > 0, `false` = out of stock'
+          schema: { type: boolean }
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [name, code, price, quantity, category, createdAt, updatedAt]
+            default: name
+        - $ref: '#/components/parameters/OrderAsc'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: The initial quantity is recorded as an `INITIAL` stock movement.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductCreate' }
+            example:
+              name: Orange Juice 1L
+              code: BEV-002
+              description: 100% pressed orange juice
+              price: 2.49
+              quantity: 60
+              categoryId: 1
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Products]
+      summary: Get product details
+      operationId: getProduct
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Products]
+      summary: Update product information
+      description: |
+        Partial update. `quantity` cannot be changed here; use the stock
+        increase/decrease endpoints so every change is recorded in history.
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdate' }
+            example: { price: 2.79 }
+      responses:
+        '200':
+          description: Updated product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      description: Records a `REMOVED` stock movement; the product's history is kept.
+      operationId: deleteProduct
+      responses:
+        '204': { description: Product deleted }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products/{id}/stock/increase:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Stock]
+      summary: Increase stock
+      operationId: increaseStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockAdjustment' }
+            example: { quantity: 24, reason: Supplier delivery }
+      responses:
+        '200':
+          description: Updated product and the recorded movement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockAdjustmentResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products/{id}/stock/decrease:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Stock]
+      summary: Decrease stock
+      description: Fails with 422 if the result would be below zero; nothing is changed in that case.
+      operationId: decreaseStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockAdjustment' }
+            example: { quantity: 3, reason: Sold }
+      responses:
+        '200':
+          description: Updated product and the recorded movement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockAdjustmentResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Insufficient stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { message: 'Insufficient stock for "BEV-001": requested 500, available 120' }
+
+  /products/{id}/stock-movements:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Stock]
+      summary: Stock history of a product
+      operationId: listProductStockMovements
+      parameters:
+        - $ref: '#/components/parameters/MovementType'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/OrderDesc'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated stock movements
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementList' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stock-movements:
+    get:
+      tags: [Stock]
+      summary: Stock history of all products
+      description: Includes movements of deleted products (filter with `productId`).
+      operationId: listStockMovements
+      parameters:
+        - name: productId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/MovementType'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/OrderDesc'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated stock movements
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementList' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    OrderAsc:
+      name: order
+      in: query
+      schema: { type: string, enum: [asc, desc], default: asc }
+    OrderDesc:
+      name: order
+      in: query
+      schema: { type: string, enum: [asc, desc], default: desc }
+    MovementType:
+      name: type
+      in: query
+      schema: { $ref: '#/components/schemas/MovementType' }
+    From:
+      name: from
+      in: query
+      description: Only movements at or after this date/time
+      schema: { type: string, format: date-time }
+      example: '2026-01-01'
+    To:
+      name: to
+      in: query
+      description: Only movements at or before this date/time
+      schema: { type: string, format: date-time }
+
+  responses:
+    ValidationError:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              message: Validation failed
+              details:
+                - { field: body.price, message: Price can have at most 2 decimal places }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { message: Product with id 42 not found }
+    Conflict:
+      description: Conflicts with existing data (duplicate name/code, category still in use)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { message: Product with code "BEV-001" already exists }
+
+  schemas:
+    Category:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: Beverages }
+        description: { type: [string, 'null'], example: "Soft drinks, juices, water, coffee and tea" }
+        productCount: { type: integer, example: 4 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CategoryCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100, description: Unique (case-insensitive) }
+        description: { type: [string, 'null'], maxLength: 500 }
+
+    CategoryUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], maxLength: 500 }
+
+    CategoryResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Category' }
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer, example: 2 }
+        name: { type: string, example: Orange Juice 1L }
+        code: { type: string, example: BEV-002 }
+        description: { type: [string, 'null'] }
+        price: { type: number, example: 2.49 }
+        quantity: { type: integer, minimum: 0, example: 60 }
+        categoryId: { type: integer, example: 1 }
+        categoryName: { type: string, example: Beverages }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ProductCreate:
+      type: object
+      additionalProperties: false
+      required: [name, code, price, categoryId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        code: { type: string, minLength: 1, maxLength: 50, description: Unique (case-insensitive) }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        price: { type: number, minimum: 0, maximum: 1000000, description: At most 2 decimal places }
+        quantity: { type: integer, minimum: 0, default: 0, description: Initial stock }
+        categoryId: { type: integer, minimum: 1 }
+
+    ProductUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        code: { type: string, minLength: 1, maxLength: 50 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        price: { type: number, minimum: 0, maximum: 1000000 }
+        categoryId: { type: integer, minimum: 1 }
+
+    ProductResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Product' }
+
+    StockAdjustment:
+      type: object
+      additionalProperties: false
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 1, description: Amount to add or remove }
+        reason: { type: string, minLength: 1, maxLength: 255 }
+
+    StockAdjustmentResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            product: { $ref: '#/components/schemas/Product' }
+            movement: { $ref: '#/components/schemas/StockMovement' }
+
+    MovementType:
+      type: string
+      enum: [INITIAL, INCREASE, DECREASE, REMOVED]
+
+    StockMovement:
+      type: object
+      properties:
+        id: { type: integer, example: 17 }
+        productId: { type: integer, example: 2 }
+        productName: { type: string, example: Orange Juice 1L, description: Snapshot at time of change }
+        productCode: { type: string, example: BEV-002, description: Snapshot at time of change }
+        type: { $ref: '#/components/schemas/MovementType' }
+        quantityChange: { type: integer, example: -3, description: "Positive for increases, negative for decreases" }
+        quantityBefore: { type: integer, example: 60 }
+        quantityAfter: { type: integer, example: 57 }
+        reason: { type: [string, 'null'], example: Sold }
+        createdAt: { type: string, format: date-time }
+
+    StockMovementList:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/StockMovement' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+    StockSummary:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              categoryId: { type: integer, example: 1 }
+              categoryName: { type: string, example: Beverages }
+              productCount: { type: integer, example: 4 }
+              totalQuantity: { type: integer, example: 215 }
+              totalValue: { type: number, example: 547.85 }
+        totals:
+          type: object
+          properties:
+            productCount: { type: integer, example: 10 }
+            totalQuantity: { type: integer, example: 460 }
+            totalValue: { type: number, example: 1272.9 }
+
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, example: 42 }
+        totalPages: { type: integer, example: 3 }
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [message]
+          properties:
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string, example: body.price }
+                  message: { type: string }
