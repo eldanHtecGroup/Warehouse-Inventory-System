@@ -1,3 +1,4 @@
+import { STATUS_CODES } from 'node:http';
 import ApiError from '../utils/ApiError.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
@@ -19,6 +20,10 @@ export const normalizeError = (err) => {
   const status = err?.status ?? err?.statusCode;
   if (Number.isInteger(status) && status >= 400 && status < 500) {
     return { statusCode: status, message: err.expose ? err.message : 'Bad Request' };
+  }
+  // Keep specific server statuses (e.g. 503) but never expose their internal message
+  if (Number.isInteger(status) && status >= 500 && status < 600) {
+    return { statusCode: status, message: STATUS_CODES[status] ?? 'Internal Server Error' };
   }
   return { statusCode: 500, message: 'Internal Server Error' };
 };

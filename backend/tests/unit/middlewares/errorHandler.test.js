@@ -35,9 +35,20 @@ describe('normalizeError', () => {
     assert.deepEqual(normalizeError(err), { statusCode: 400, message: 'Bad Request' });
   });
 
+  it('keeps specific 5xx statuses but hides their message', () => {
+    assert.deepEqual(normalizeError(Object.assign(new Error('db locked'), { status: 503 })), {
+      statusCode: 503,
+      message: 'Service Unavailable',
+    });
+    assert.deepEqual(normalizeError(Object.assign(new Error('x'), { statusCode: 599 })), {
+      statusCode: 599,
+      message: 'Internal Server Error',
+    });
+    assert.equal(normalizeError(Object.assign(new Error('x'), { status: 600 })).statusCode, 500);
+  });
+
   it('turns everything else into a generic 500', () => {
     assert.deepEqual(normalizeError(new Error('db exploded')), { statusCode: 500, message: 'Internal Server Error' });
-    assert.equal(normalizeError(Object.assign(new Error('x'), { status: 503 })).statusCode, 500);
     assert.equal(normalizeError('a string was thrown').statusCode, 500);
     assert.equal(normalizeError(undefined).statusCode, 500);
   });
