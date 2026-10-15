@@ -277,6 +277,7 @@ paths:
     post:
       tags: [Stock]
       summary: Increase stock
+      description: Fails with 422 if the result would exceed 1,000,000,000; nothing is changed in that case.
       operationId: increaseStock
       requestBody:
         required: true
@@ -292,6 +293,13 @@ paths:
               schema: { $ref: '#/components/schemas/StockAdjustmentResponse' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Maximum stock exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { message: 'Stock for "BEV-001" cannot exceed 1000000000: requested 500, available 999999900' }
 
   /products/{id}/stock/decrease:
     parameters:
@@ -475,7 +483,7 @@ components:
         code: { type: string, example: BEV-002 }
         description: { type: [string, 'null'] }
         price: { type: number, example: 2.49 }
-        quantity: { type: integer, minimum: 0, example: 60 }
+        quantity: { type: integer, minimum: 0, maximum: 1000000000, example: 60 }
         categoryId: { type: integer, example: 1 }
         categoryName: { type: string, example: Beverages }
         createdAt: { type: string, format: date-time }
@@ -490,7 +498,7 @@ components:
         code: { type: string, minLength: 1, maxLength: 50, description: Unique (case-insensitive) }
         description: { type: [string, 'null'], maxLength: 1000 }
         price: { type: number, minimum: 0, maximum: 1000000, description: At most 2 decimal places }
-        quantity: { type: integer, minimum: 0, default: 0, description: Initial stock }
+        quantity: { type: integer, minimum: 0, maximum: 1000000000, default: 0, description: Initial stock }
         categoryId: { type: integer, minimum: 1 }
 
     ProductUpdate:
@@ -514,7 +522,7 @@ components:
       additionalProperties: false
       required: [quantity]
       properties:
-        quantity: { type: integer, minimum: 1, description: Amount to add or remove }
+        quantity: { type: integer, minimum: 1, maximum: 1000000000, description: Amount to add or remove }
         reason: { type: string, minLength: 1, maxLength: 255 }
 
     StockAdjustmentResponse:
