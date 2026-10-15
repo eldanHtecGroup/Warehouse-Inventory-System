@@ -12,7 +12,7 @@
     "test": "node --test --import ./tests/setup.js",
     "test:unit": "node --test --import ./tests/setup.js \"tests/unit/**/*.test.js\"",
     "test:integration": "node --test --import ./tests/setup.js \"tests/integration/**/*.test.js\"",
-    "test:coverage": "c8 npm run test:unit"
+    "test:coverage": "c8 npm test"
   },
   "engines": {
     "node": ">=22"

@@ -27,6 +27,8 @@ const StockAdjustForm = ({ product, onAdjusted }) => {
     validationError = 'Enter a whole number greater than 0.';
   } else if (isDecrease && amount > product.quantity) {
     validationError = `Only ${formatNumber(product.quantity)} in stock. Stock can't go below zero.`;
+  } else if (!isDecrease && product.quantity + amount > LIMITS.MAX_QUANTITY) {
+    validationError = `Stock can't exceed ${formatNumber(LIMITS.MAX_QUANTITY)} (currently ${formatNumber(product.quantity)}).`;
   }
 
   const newQuantity = validationError ? null : product.quantity + (isDecrease ? -amount : amount);
@@ -84,7 +86,7 @@ const StockAdjustForm = ({ product, onAdjusted }) => {
           type="number"
           inputMode="numeric"
           min="1"
-          max={isDecrease ? product.quantity : undefined}
+          max={isDecrease ? product.quantity : LIMITS.MAX_QUANTITY - product.quantity}
           step="1"
           value={quantity}
           onChange={(event) => setQuantity(event.target.value)}

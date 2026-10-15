@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { LIMITS } from '../../constants/inventory.js';
 import { ROUTES } from '../../constants/routes.js';
 import { getFieldErrors } from '../../utils/apiErrors.js';
+import { formatNumber } from '../../utils/formatters.js';
 import FormField from '../common/FormField.jsx';
 
 const PRICE_PATTERN = /^\d+(\.\d{1,2})?$/;
@@ -41,8 +42,12 @@ const validate = (values, isEdit) => {
     errors.description = `Description must be at most ${LIMITS.PRODUCT_DESCRIPTION} characters.`;
   }
 
-  if (!isEdit && !WHOLE_NUMBER_PATTERN.test(values.quantity.trim())) {
-    errors.quantity = 'Initial quantity must be a whole number of 0 or more.';
+  if (!isEdit) {
+    const quantity = values.quantity.trim();
+    if (!WHOLE_NUMBER_PATTERN.test(quantity)) errors.quantity = 'Initial quantity must be a whole number of 0 or more.';
+    else if (Number(quantity) > LIMITS.MAX_QUANTITY) {
+      errors.quantity = `Initial quantity must be at most ${formatNumber(LIMITS.MAX_QUANTITY)}.`;
+    }
   }
 
   return errors;

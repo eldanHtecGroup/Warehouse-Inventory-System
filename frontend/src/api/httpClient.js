@@ -1,4 +1,5 @@
 import config from '../config/index.js';
+import { logError } from '../utils/errorLogger.js';
 import { buildQueryString } from '../utils/queryString.js';
 
 // Thin wrapper around fetch: prefixes the API base URL, serializes query params,
@@ -29,6 +30,7 @@ const request = async (path, { method = 'GET', body, params, headers, ...options
     });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
+    logError(error, { source: 'http', method, path });
     throw new ApiError('Unable to reach the server. Check your connection and try again.', 0);
   }
 
@@ -38,7 +40,13 @@ const request = async (path, { method = 'GET', body, params, headers, ...options
 
   if (!response.ok) {
     const error = payload?.error;
-    throw new ApiError(error?.message || response.statusText, response.status, error?.details);
+    const apiError = new ApiError(error?.message || response.statusText, response.status, error?.details);
+    // 4xx are expected (validation, conflicts) and shown to the user; 5xx point to a server problem.
+    // The requestId matches the backend's log entry for the same request.
+    if (response.status >= 500) {
+      logError(apiError, { source: 'http', method, path, status: response.status, requestId: error?.requestId });
+    }
+    throw apiError;
   }
 
   return payload;

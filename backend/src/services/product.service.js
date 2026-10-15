@@ -3,7 +3,7 @@ import productRepository from '../repositories/product.repository.js';
 import categoryRepository from '../repositories/category.repository.js';
 import stockMovementRepository from '../repositories/stockMovement.repository.js';
 import ApiError from '../utils/ApiError.js';
-import { MOVEMENT_TYPES } from '../utils/constants.js';
+import { MAX_STOCK_QUANTITY, MOVEMENT_TYPES } from '../utils/constants.js';
 
 const listProducts = (filters) => {
   const { items, total } = productRepository.findMany(filters);
@@ -75,6 +75,11 @@ const adjustStock = db.transaction((id, quantityChange, reason) => {
   if (newQuantity < 0) {
     throw ApiError.unprocessable(
       `Insufficient stock for "${product.code}": requested ${-quantityChange}, available ${product.quantity}`,
+    );
+  }
+  if (newQuantity > MAX_STOCK_QUANTITY) {
+    throw ApiError.unprocessable(
+      `Stock for "${product.code}" cannot exceed ${MAX_STOCK_QUANTITY}: requested ${quantityChange}, available ${product.quantity}`,
     );
   }
 

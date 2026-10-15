@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { id, pagination, sortOrder, booleanQuery } from './common.validator.js';
-import { PRODUCT_SORT_FIELDS } from '../utils/constants.js';
+import { MAX_STOCK_QUANTITY, PRODUCT_SORT_FIELDS } from '../utils/constants.js';
 
 const hasAtMostTwoDecimals = (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-9;
 
@@ -20,7 +20,7 @@ const productFields = {
 
 export const createProductBody = z.strictObject({
   ...productFields,
-  quantity: z.number().int().nonnegative().default(0),
+  quantity: z.number().int().nonnegative().max(MAX_STOCK_QUANTITY).default(0),
 });
 
 // Quantity is intentionally not updatable here: stock changes must go through
@@ -31,7 +31,7 @@ export const updateProductBody = z
   .refine((data) => Object.keys(data).length > 0, { message: 'At least one field must be provided' });
 
 export const stockAdjustmentBody = z.strictObject({
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().positive().max(MAX_STOCK_QUANTITY),
   reason: z.string().trim().min(1).max(255).optional(),
 });
 
