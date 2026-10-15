@@ -1,0 +1,12 @@
+{
+  "all": true,
+  "include": ["src/**/*.js"],
+  "exclude": ["src/server.js", "src/db/seed.js"],
+  "reporter": ["text", "html", "lcov"],
+  "reports-dir": "coverage",
+  "check-coverage": true,
+  "lines": 70,
+  "statements": 70,
+  "functions": 70,
+  "branches": 70
+}

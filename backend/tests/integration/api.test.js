@@ -1,11 +1,6 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-
-// Must be set before the app (and therefore the database) is imported
-process.env.NODE_ENV = 'test';
-process.env.DB_PATH = ':memory:';
-
-const { default: app } = await import('../src/app.js');
+import app from '../../src/app.js';
 
 let server;
 let baseUrl;
@@ -164,6 +159,31 @@ describe('stock', () => {
         ['DECREASE', -15, 15, 0],
       ],
     );
+  });
+});
+
+describe('error handling', () => {
+  test('returns 400 for malformed JSON', async () => {
+    const res = await fetch(`${baseUrl}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"name": ',
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error.message, 'Malformed JSON in request body');
+  });
+
+  test('returns 404 with request id for unknown routes', async () => {
+    const res = await fetch(`${baseUrl}/does-not-exist`);
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.error.requestId, res.headers.get('x-request-id'));
+  });
+
+  test('propagates a valid incoming request id', async () => {
+    const res = await fetch(`${baseUrl}/health`, { headers: { 'X-Request-Id': 'trace-123' } });
+    assert.equal(res.headers.get('x-request-id'), 'trace-123');
   });
 });
 

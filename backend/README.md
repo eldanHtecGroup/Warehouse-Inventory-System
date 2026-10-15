@@ -12,13 +12,16 @@ npm run db:seed   # optional: sample categories and products
 npm run dev       # http://localhost:5000/api
 ```
 
-| Script             | Description                                  |
-| ------------------ | -------------------------------------------- |
-| `npm run dev`      | Start with auto-restart on file changes      |
-| `npm start`        | Start the server                             |
-| `npm test`         | Run integration tests (in-memory database)   |
-| `npm run db:seed`  | Insert sample data into an empty database    |
-| `npm run db:reset` | Wipe all data and reseed                     |
+| Script                     | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `npm run dev`              | Start with auto-restart on file changes          |
+| `npm start`                | Start the server                                 |
+| `npm test`                 | Run all tests (unit + integration, in-memory DB) |
+| `npm run test:unit`        | Run unit tests only                              |
+| `npm run test:integration` | Run HTTP integration tests only                  |
+| `npm run test:coverage`    | Unit tests with coverage report; fails below 70% |
+| `npm run db:seed`          | Insert sample data into an empty database        |
+| `npm run db:reset`         | Wipe all data and reseed                         |
 
 The database file is created at `data/inventory.db` (configurable via `DB_PATH`).
 The schema in [src/db/schema.sql](src/db/schema.sql) is applied automatically on startup.
@@ -35,8 +38,47 @@ src/
 ├── services/      business rules (stock never below zero, history recording, uniqueness)
 ├── repositories/  SQL queries and row ↔ object mapping
 ├── validators/    zod schemas for params, query and body
-├── middlewares/   validate, notFound, errorHandler
-└── utils/         ApiError, constants
+├── middlewares/   requestLogger, validate, notFound, errorHandler
+└── utils/         ApiError, logger, constants
+
+tests/
+├── setup.js       preloaded: test env, in-memory DB, silent logs
+├── helpers/       fake req/res/logger
+├── unit/          controllers, services (mocked repositories), repositories,
+│                  validators, middlewares, utils
+└── integration/   full HTTP tests against the running app
+```
+
+## Testing
+
+Tests use the built-in Node.js test runner; coverage is measured with [c8](https://github.com/bcoe/c8)
+(config in [.c8rc.json](.c8rc.json)). `npm run test:coverage` enforces **at least 70%**
+statement, branch, function and line coverage from unit tests alone, and writes an HTML
+report to `coverage/index.html`. `src/server.js` (process bootstrap) and `src/db/seed.js`
+(CLI script) are excluded.
+
+## Error handling and logging
+
+- **Logger**: [pino](https://getpino.io) ([src/utils/logger.js](src/utils/logger.js)). JSON lines
+  in production, pretty output in development, silent in tests. Level via `LOG_LEVEL`.
+- **Request logging**: one access log line per request with method, URL, status and
+  response time. Each request gets an id (`X-Request-Id` header, reused if the client sends
+  one) that appears in every log line for that request and in error responses.
+- **Global error handler** ([src/middlewares/errorHandler.js](src/middlewares/errorHandler.js)):
+  every error thrown in a route (sync or async) ends up here.
+  - Known errors (`ApiError`, malformed JSON, oversized body, DB constraint violations)
+    become the matching 4xx response and are logged at `warn`.
+  - Anything else becomes a generic `500 Internal Server Error` (no internals leaked) and
+    is logged at `error` with the full stack trace.
+- **Process-level handlers** ([src/server.js](src/server.js)): `uncaughtException`,
+  `unhandledRejection` and server startup errors are logged at `fatal`, then the process
+  shuts down gracefully (10s timeout) with exit code 1 so a process manager can restart it.
+  `SIGINT`/`SIGTERM` close the HTTP server and database cleanly.
+
+Error response format:
+
+```json
+{ "error": { "message": "Validation failed", "details": [{ "field": "body.price", "message": "..." }], "requestId": "6f1c..." } }
 ```
 
 ## API documentation

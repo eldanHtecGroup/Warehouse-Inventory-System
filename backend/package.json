@@ -9,7 +9,10 @@
     "dev": "node --watch --env-file-if-exists=.env src/server.js",
     "db:seed": "node --env-file-if-exists=.env src/db/seed.js",
     "db:reset": "node --env-file-if-exists=.env src/db/seed.js --reset",
-    "test": "node --test"
+    "test": "node --test --import ./tests/setup.js",
+    "test:unit": "node --test --import ./tests/setup.js \"tests/unit/**/*.test.js\"",
+    "test:integration": "node --test --import ./tests/setup.js \"tests/integration/**/*.test.js\"",
+    "test:coverage": "c8 npm run test:unit"
   },
   "engines": {
     "node": ">=22"
@@ -19,9 +22,14 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "morgan": "^1.12.1",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "swagger-ui-express": "^5.0.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "c8": "^12.0.0",
+    "pino-pretty": "^13.2.0"
   }
 }
