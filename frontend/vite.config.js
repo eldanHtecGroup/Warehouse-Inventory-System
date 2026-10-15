@@ -15,5 +15,19 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    test: {
+      environment: 'jsdom',
+      setupFiles: ['./tests/setup.js'],
+      include: ['tests/**/*.test.{js,jsx}'],
+      // Fixed locale/currency so formatted values are the same on every machine
+      env: { VITE_CURRENCY: 'USD', TZ: 'UTC' },
+      coverage: {
+        provider: 'v8',
+        include: ['src/**/*.{js,jsx}'],
+        exclude: ['src/main.jsx'],
+        reporter: ['text', 'html', 'lcov'],
+        thresholds: { statements: 70, branches: 70, functions: 70, lines: 70 },
+      },
+    },
   };
 });

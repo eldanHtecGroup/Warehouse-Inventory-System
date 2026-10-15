@@ -1,13 +1,15 @@
 import { Link } from 'react-router';
+
 import { ROUTES } from '../constants/routes.js';
+import PageHeader from '../components/common/PageHeader.jsx';
 
 const NotFoundPage = () => (
-  <section>
-    <h1>Page not found</h1>
+  <>
+    <PageHeader title="Page not found" />
     <p>
       <Link to={ROUTES.HOME}>Back to dashboard</Link>
     </p>
-  </section>
+  </>
 );
 
 export default NotFoundPage;

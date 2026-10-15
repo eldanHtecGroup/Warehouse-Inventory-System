@@ -1,7 +1,9 @@
 import config from '../config/index.js';
+import { buildQueryString } from '../utils/queryString.js';
 
-// Thin wrapper around fetch: prefixes the API base URL, sends/parses JSON,
-// and throws an ApiError carrying the backend's { error: { message } } payload.
+// Thin wrapper around fetch: prefixes the API base URL, serializes query params,
+// sends/parses JSON, and throws an ApiError carrying the backend's
+// { error: { message, details } } payload.
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -12,16 +14,23 @@ export class ApiError extends Error {
   }
 }
 
-const request = async (path, { method = 'GET', body, headers, ...options } = {}) => {
-  const response = await fetch(`${config.apiBaseUrl}${path}`, {
-    method,
-    headers: {
-      ...(body !== undefined && { 'Content-Type': 'application/json' }),
-      ...headers,
-    },
-    ...(body !== undefined && { body: JSON.stringify(body) }),
-    ...options,
-  });
+const request = async (path, { method = 'GET', body, params, headers, ...options } = {}) => {
+  let response;
+  try {
+    response = await fetch(`${config.apiBaseUrl}${path}${buildQueryString(params)}`, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        ...headers,
+      },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+      ...options,
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    throw new ApiError('Unable to reach the server. Check your connection and try again.', 0);
+  }
 
   if (response.status === 204) return null;
 
@@ -38,7 +47,7 @@ const request = async (path, { method = 'GET', body, headers, ...options } = {})
 const httpClient = {
   get: (path, options) => request(path, { ...options, method: 'GET' }),
   post: (path, body, options) => request(path, { ...options, method: 'POST', body }),
-  put: (path, body, options) => request(path, { ...options, method: 'PUT', body }),
+  patch: (path, body, options) => request(path, { ...options, method: 'PATCH', body }),
   delete: (path, options) => request(path, { ...options, method: 'DELETE' }),
 };
 
