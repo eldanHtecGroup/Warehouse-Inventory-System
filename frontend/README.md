@@ -10,7 +10,7 @@ React + Vite single-page app for the Warehouse Inventory System, using a **layer
 | View product details (name, price, code, ...) | **Products** → click a product name                                                       |
 | Sort and filter products                      | **Products**: click column headers to sort; filter by search, category, stock, price, quantity |
 | Increase / decrease stock                     | *Adjust stock* on the product list (modal) or the product page                            |
-| Prevent stock from going below zero           | The form blocks it before sending; the backend also rejects it (`422`)                    |
+| Prevent stock from going below zero           | The form blocks it before sending; the backend also rejects it (`422`). Increases above the 1,000,000,000 maximum are blocked the same way |
 | Total stock per category                      | **Dashboard** → *Stock by category*; **Categories** page                                   |
 | History of all inventory changes              | **History** page (filter by type, date range, product); per-product history on its page   |
 | Organize items into categories                | **Categories** page: add, rename, delete (only when the category is empty)                |
@@ -73,6 +73,16 @@ tests/
 
 `npm run test:coverage` fails if statements, branches, functions or lines drop below **70%** (configured in `vite.config.js`).
 
+If test files fail with `Timeout waiting for worker to respond` on a slow or busy machine, run with fewer workers: `npx vitest run --maxWorkers=3`.
+
+## Error handling and logging
+
+All client-side errors are logged through one function, `logError` in [src/utils/errorLogger.js](src/utils/errorLogger.js) (currently `console.error`; swap in a reporting service there).
+
+- **Render errors**: an `ErrorBoundary` wraps each page inside `MainLayout`, so a crashing page shows a "Something went wrong" message with *Try again* / *Go to dashboard* while the navbar keeps working. Navigating to another page clears the error. A second boundary in `App.jsx` is the last resort. React reports caught and uncaught render errors to `logError` via the `createRoot` options in `main.jsx`.
+- **Errors outside React**: `window` `error` and `unhandledrejection` events are logged (installed in `main.jsx`).
+- **API errors**: network failures and `5xx` responses are logged by `httpClient` together with the backend's `requestId`, which matches the backend log entry for the same request. Expected `4xx` responses (validation, conflicts, insufficient stock) are only shown to the user.
+
 ## Project structure
 
 ```
@@ -81,7 +91,7 @@ src/
 │                     #   category.api.js, product.api.js, stockMovement.api.js
 ├── assets/           # Images, icons, fonts imported by components
 ├── components/       # Presentational UI, grouped by domain
-│   ├── common/       #   Generic building blocks (Modal, Pagination, FormField, ...)
+│   ├── common/       #   Generic building blocks (Modal, Pagination, FormField, ErrorBoundary, ...)
 │   ├── category/     #   CategoryForm, CategoryTable, CategoryStockTable
 │   ├── product/      #   ProductTable, ProductFilters, ProductForm, StockAdjustForm, ...
 │   ├── stockMovement/#   MovementTable, MovementFilters, MovementTypeBadge
@@ -95,9 +105,9 @@ src/
 │                     #   ProductForm, Categories, History, NotFound
 ├── routes/           # Route definitions (AppRouter)
 ├── styles/           # Global CSS (design tokens, light/dark theme)
-├── utils/            # Pure helpers: formatters, query strings, API error mapping
-├── App.jsx           # Root component (router + providers)
-└── main.jsx          # Entry point
+├── utils/            # Helpers: formatters, query strings, API error mapping, error logger
+├── App.jsx           # Root component (error boundary + router + providers)
+└── main.jsx          # Entry point (global error handlers)
 ```
 
 Dependency direction: `pages` → `components` / `hooks` → `api` → `config`. Pages never call `fetch` directly; they go through the `api` layer, which unwraps the backend's `{ data }` envelope and turns `{ error }` responses into an `ApiError` (validation `details` are mapped onto form fields).

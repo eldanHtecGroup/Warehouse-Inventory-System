@@ -19,7 +19,7 @@ npm run dev       # http://localhost:5000/api
 | `npm test`                 | Run all tests (unit + integration, in-memory DB) |
 | `npm run test:unit`        | Run unit tests only                              |
 | `npm run test:integration` | Run HTTP integration tests only                  |
-| `npm run test:coverage`    | Unit tests with coverage report; fails below 70% |
+| `npm run test:coverage`    | All tests with coverage report; fails below 70%  |
 | `npm run db:seed`          | Insert sample data into an empty database        |
 | `npm run db:reset`         | Wipe all data and reseed                         |
 
@@ -52,9 +52,9 @@ tests/
 ## Testing
 
 Tests use the built-in Node.js test runner; coverage is measured with [c8](https://github.com/bcoe/c8)
-(config in [.c8rc.json](.c8rc.json)). `npm run test:coverage` enforces **at least 70%**
-statement, branch, function and line coverage from unit tests alone, and writes an HTML
-report to `coverage/index.html`. `src/server.js` (process bootstrap) and `src/db/seed.js`
+(config in [.c8rc.json](.c8rc.json)). `npm run test:coverage` runs the unit and integration
+tests, enforces **at least 70%** statement, branch, function and line coverage, and writes an
+HTML report to `coverage/index.html`. `src/server.js` (process bootstrap) and `src/db/seed.js`
 (CLI script) are excluded.
 
 ## Error handling and logging
@@ -68,8 +68,9 @@ report to `coverage/index.html`. `src/server.js` (process bootstrap) and `src/db
   every error thrown in a route (sync or async) ends up here.
   - Known errors (`ApiError`, malformed JSON, oversized body, DB constraint violations)
     become the matching 4xx response and are logged at `warn`.
-  - Anything else becomes a generic `500 Internal Server Error` (no internals leaked) and
-    is logged at `error` with the full stack trace.
+  - Errors carrying a 5xx status (e.g. `503`) keep that status with its standard message;
+    anything else becomes a generic `500 Internal Server Error`. Internal details are never
+    sent to the client, and the error is logged at `error` with the full stack trace.
 - **Process-level handlers** ([src/server.js](src/server.js)): `uncaughtException`,
   `unhandledRejection` and server startup errors are logged at `fatal`, then the process
   shuts down gracefully (10s timeout) with exit code 1 so a process manager can restart it.
@@ -121,7 +122,7 @@ lists); errors use `{ error: { message, details? } }`.
 | POST   | `/api/products`                       | Create `{ name, code, price, categoryId, quantity?, description? }` |
 | PATCH  | `/api/products/:id`                   | Update info (`quantity` is not allowed here)    |
 | DELETE | `/api/products/:id`                   | Delete (history is kept)                        |
-| POST   | `/api/products/:id/stock/increase`    | `{ quantity, reason? }` – add stock             |
+| POST   | `/api/products/:id/stock/increase`    | `{ quantity, reason? }` – add stock (422 above the maximum) |
 | POST   | `/api/products/:id/stock/decrease`    | `{ quantity, reason? }` – remove stock (422 if insufficient) |
 | GET    | `/api/products/:id/stock-movements`   | Stock history of one product                    |
 
@@ -156,6 +157,11 @@ after a product is deleted.
 
 - **Stock never goes below zero**: enforced in the service layer (422 response) and by a
   `CHECK (quantity >= 0)` constraint in the database.
+- **Maximum stock**: a product holds at most 1,000,000,000 units (`MAX_STOCK_QUANTITY` in
+  [src/utils/constants.js](src/utils/constants.js)). Larger initial quantities or adjustments
+  are rejected (400), and an increase that would exceed it is rejected (422) without changing
+  anything. This keeps quantities, history and stock values exact (JavaScript numbers lose
+  precision above 2^53).
 - **Every stock change is audited**: quantity can only change through the stock
   endpoints (or product creation/deletion), and the update plus its history record run
   in a single transaction.
