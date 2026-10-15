@@ -158,6 +158,17 @@ describe('ProductForm', () => {
     expect(screen.getByText(/Price must be at most 1000000/)).toBeInTheDocument();
   });
 
+  it('caps the initial quantity at the maximum stock', async () => {
+    const onSubmit = vi.fn();
+    const { user } = renderWithProviders(<ProductForm categories={categories} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('Initial quantity'), { target: { value: '1000000001' } });
+    await user.click(screen.getByRole('button', { name: 'Create product' }));
+
+    expect(screen.getByText('Initial quantity must be at most 1,000,000,000.')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('submits a trimmed payload with the initial quantity', async () => {
     const onSubmit = vi.fn().mockResolvedValue();
     const { user } = renderWithProviders(<ProductForm categories={categories} onSubmit={onSubmit} onCancel={vi.fn()} />);
@@ -248,6 +259,19 @@ describe('StockAdjustForm', () => {
     expect(screen.getByText(/Only 2 in stock/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Decrease stock' })).toBeDisabled();
     fireEvent.submit(screen.getByRole('button', { name: 'Decrease stock' }).closest('form'));
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('prevents increasing above the maximum stock', () => {
+    const spy = vi.spyOn(productApi, 'increaseStock');
+    renderWithProviders(<StockAdjustForm product={buildProduct({ quantity: 999_999_990 })} />);
+
+    expect(screen.getByLabelText('Quantity')).toHaveAttribute('max', '10');
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '11' } });
+
+    expect(screen.getByText("Stock can't exceed 1,000,000,000 (currently 999,999,990).")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Increase stock' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('button', { name: 'Increase stock' }).closest('form'));
     expect(spy).not.toHaveBeenCalled();
   });
 

@@ -144,6 +144,18 @@ describe('stock', () => {
     assert.equal(product.body.data.quantity, 0);
   });
 
+  test('prevents stock from exceeding the maximum', async () => {
+    const fill = await api('POST', `/products/${ids.cola}/stock/increase`, { quantity: 1_000_000_000 });
+    assert.equal(fill.status, 200);
+
+    const res = await api('POST', `/products/${ids.cola}/stock/increase`, { quantity: 1 });
+    assert.equal(res.status, 422);
+    const product = await api('GET', `/products/${ids.cola}`);
+    assert.equal(product.body.data.quantity, 1_000_000_000);
+
+    await api('POST', `/products/${ids.cola}/stock/decrease`, { quantity: 1_000_000_000 });
+  });
+
   test('rejects non-positive adjustments', async () => {
     const res = await api('POST', `/products/${ids.cola}/stock/increase`, { quantity: 0 });
     assert.equal(res.status, 400);
@@ -157,6 +169,8 @@ describe('stock', () => {
         ['INITIAL', 10, 0, 10],
         ['INCREASE', 5, 10, 15],
         ['DECREASE', -15, 15, 0],
+        ['INCREASE', 1_000_000_000, 0, 1_000_000_000],
+        ['DECREASE', -1_000_000_000, 1_000_000_000, 0],
       ],
     );
   });
@@ -237,7 +251,7 @@ describe('summary and deletion', () => {
     const history = await api('GET', `/stock-movements?productId=${ids.cola}`);
     assert.equal(history.body.data[0].type, 'REMOVED');
     assert.equal(history.body.data[0].quantityChange, -4);
-    assert.equal(history.body.meta.total, 5);
+    assert.equal(history.body.meta.total, 7);
   });
 
   test('filters global history by type', async () => {

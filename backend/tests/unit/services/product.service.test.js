@@ -167,6 +167,27 @@ describe('productService stock adjustments', () => {
     assert.equal(recordMovement.mock.callCount(), 0);
   });
 
+  it('refuses to let stock exceed the maximum and changes nothing', (t) => {
+    t.mock.method(productRepository, 'findById', () => ({ ...product, quantity: 999_999_990 }));
+    const updateQuantity = t.mock.method(productRepository, 'updateQuantity', () => ({}));
+    const recordMovement = mockMovements(t);
+
+    assert.throws(
+      () => productService.increaseStock(1, { quantity: 11 }),
+      (err) => isApiError(422)(err) && /cannot exceed 1000000000/.test(err.message),
+    );
+    assert.equal(updateQuantity.mock.callCount(), 0);
+    assert.equal(recordMovement.mock.callCount(), 0);
+  });
+
+  it('allows stock to reach exactly the maximum', (t) => {
+    t.mock.method(productRepository, 'findById', () => ({ ...product, quantity: 999_999_990 }));
+    t.mock.method(productRepository, 'updateQuantity', (id, quantity) => ({ ...product, quantity }));
+    mockMovements(t);
+
+    assert.equal(productService.increaseStock(1, { quantity: 10 }).product.quantity, 1_000_000_000);
+  });
+
   it('throws 404 when adjusting a missing product', (t) => {
     t.mock.method(productRepository, 'findById', () => undefined);
     assert.throws(() => productService.increaseStock(1, { quantity: 1 }), isApiError(404));

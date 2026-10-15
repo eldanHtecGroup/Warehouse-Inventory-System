@@ -60,6 +60,13 @@ describe('product validators', () => {
     assert.equal(createProductBody.safeParse({ ...valid, quantity: 1.5 }).success, false);
   });
 
+  it('caps quantities at the maximum stock', () => {
+    assert.equal(createProductBody.safeParse({ ...valid, quantity: 1_000_000_000 }).success, true);
+    assert.deepEqual(errorPaths(createProductBody.safeParse({ ...valid, quantity: 1_000_000_001 })), ['quantity']);
+    assert.equal(stockAdjustmentBody.safeParse({ quantity: 1_000_000_000 }).success, true);
+    assert.deepEqual(errorPaths(stockAdjustmentBody.safeParse({ quantity: Number.MAX_SAFE_INTEGER })), ['quantity']);
+  });
+
   it('does not allow quantity changes through update', () => {
     assert.equal(updateProductBody.safeParse({ quantity: 5 }).success, false);
     assert.equal(updateProductBody.safeParse({}).success, false);

@@ -51,14 +51,44 @@ describe('httpClient', () => {
     expect(error).toMatchObject({ message: 'Validation failed', status: 400, details });
   });
 
-  it('falls back to the status text when the error body is not JSON', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(undefined, 502));
-    await expect(httpClient.get('/health')).rejects.toMatchObject({ message: 'Status 502', status: 502 });
+  it('does not log expected 4xx errors', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockResolvedValue(jsonResponse({ error: { message: 'Insufficient stock' } }, 422));
+
+    await expect(httpClient.post('/products/1/stock/decrease', { quantity: 5 })).rejects.toMatchObject({ status: 422 });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('turns network failures into a friendly ApiError', async () => {
-    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  it('logs server errors with the backend request id', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockResolvedValue(jsonResponse({ error: { message: 'Internal Server Error', requestId: 'req-7' } }, 500));
+
+    await expect(httpClient.get('/products')).rejects.toMatchObject({ status: 500 });
+    expect(consoleError).toHaveBeenCalledWith(
+      '[app error]',
+      expect.objectContaining({ source: 'http', method: 'GET', path: '/products', status: 500, requestId: 'req-7' }),
+      expect.any(ApiError),
+    );
+  });
+
+  it('falls back to the status text when the error body is not JSON', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockResolvedValue(jsonResponse(undefined, 502));
+    await expect(httpClient.get('/health')).rejects.toMatchObject({ message: 'Status 502', status: 502 });
+    expect(consoleError).toHaveBeenCalledOnce();
+  });
+
+  it('turns network failures into a friendly ApiError and logs the cause', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const cause = new TypeError('Failed to fetch');
+    fetchMock.mockRejectedValue(cause);
+
     await expect(httpClient.get('/products')).rejects.toMatchObject({ status: 0, message: /Unable to reach/ });
+    expect(consoleError).toHaveBeenCalledWith(
+      '[app error]',
+      expect.objectContaining({ message: 'Failed to fetch', source: 'http', method: 'GET', path: '/products' }),
+      cause,
+    );
   });
 
   it('rethrows aborts untouched', async () => {
